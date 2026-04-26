@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>FairLens — Real-Time Hiring Bias Detector</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+
+<!--
+  Firebase SDK — only loads if you've set up Firebase.
+  Replace the config below with your project's config from:
+  Firebase Console → Project Settings → Your apps → Firebase SDK snippet
+  Leave blank if not using Firebase — the app still works without it.
+-->
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
+<script>
+  const _firebaseConfig = {
+    apiKey:            "AIzaSyCrKP1SvUBHslF6O7StydZFxHnFrUid6V8",
+    authDomain:        "fairlens-webapp.firebaseapp.com",
+    projectId:         "fairlens-webapp",
+    storageBucket:     "fairlens-webapp.firebasestorage.app",
+    messagingSenderId: "1018145552606",
+    appId:             "1:1018145552606:web:52da20b488a29779062a4f",
+  };
+
+  if (!_firebaseConfig.apiKey.startsWith("YOUR_")) {
+    firebase.initializeApp(_firebaseConfig);
+    firebase.auth().onAuthStateChanged(async user => {
+      if (user) {
+        const token = await user.getIdToken();
+        if (window.API) API._token = token;
+        setInterval(async () => {
+          const t = await user.getIdToken(true);
+          if (window.API) API._token = t;
+        }, 55 * 60 * 1000);
+      }
+    });
+  }
+</script>
+
+<link rel="stylesheet" href="style.css"/>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<header class="topbar" role="banner">
+  <div class="logo">
+    <div class="lmark" aria-hidden="true">
+      <svg viewBox="0 0 17 17" fill="none">
+        <circle cx="8.5" cy="8.5" r="6.5" stroke="white" stroke-width="1.5"/>
+        <path d="M4.5 8.5h8M8.5 4.5v8" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
+        <circle cx="8.5" cy="4.5" r="1.8" fill="white"/>
+        <circle cx="8.5" cy="12.5" r="1.2" fill="rgba(255,255,255,0.5)"/>
+      </svg>
+    </div>
+    <div>
+      <div class="lname">FairLens</div>
+      <div class="ltag">Hiring Bias Detection · Gemini + Firebase</div>
+    </div>
+  </div>
+
+  <nav class="stepper" aria-label="Workflow steps">
+    <span class="step active" id="step-upload">1 Upload</span>
+    <span class="step-arr" aria-hidden="true">›</span>
+    <span class="step" id="step-inspect">2 Inspect</span>
+    <span class="step-arr" aria-hidden="true">›</span>
+    <span class="step" id="step-measure">3 Measure</span>
+    <span class="step-arr" aria-hidden="true">›</span>
+    <span class="step" id="step-fix">4 Fix</span>
+    <span class="step-arr" aria-hidden="true">›</span>
+    <span class="step" id="step-report">5 Report</span>
+  </nav>
+
+  <div class="topbar-right">
+    <div class="tbadge" id="ds-badge">No dataset loaded</div>
+    <div class="tbadge server-badge">
+      <span class="sdot" id="sdot"></span>
+      <span id="stext">Connecting…</span>
+    </div>
+  </div>
+</header>
+
+<div class="shell">
+  <!-- SIDEBAR -->
+  <nav class="sidebar" aria-label="Main navigation">
+    <div class="nav-sec">Workflow</div>
+    <button class="nav-item active" data-panel="upload">
+      <span class="nav-icon">📁</span> Upload Dataset
+    </button>
+    <button class="nav-item locked" data-panel="preview">
+      <span class="nav-icon">👁</span> Data Preview
+    </button>
+    <button class="nav-item locked" data-panel="overview">
+      <span class="nav-icon">📊</span> Overview
+    </button>
+
+    <div class="nav-sep"></div>
+    <div class="nav-sec">Analysis</div>
+    <button class="nav-item locked" data-panel="dataset">
+      <span class="nav-icon">🔬</span> Dataset Bias
+    </button>
+    <button class="nav-item locked" data-panel="model">
+      <span class="nav-icon">⚖️</span> Model Fairness
+    </button>
+    <button class="nav-item locked" data-panel="features">
+      <span class="nav-icon">🧬</span> Feature / Proxy
+    </button>
+    <button class="nav-item locked" data-panel="inspector">
+      <span class="nav-icon">🔍</span> Candidate Inspector
+    </button>
+
+    <div class="nav-sep"></div>
+    <div class="nav-sec">Action</div>
+    <button class="nav-item locked" data-panel="mitigation">
+      <span class="nav-icon">🛠️</span> Mitigation
+    </button>
+    <button class="nav-item locked" data-panel="report">
+      <span class="nav-icon">📄</span> Audit Report
+    </button>
+
+    <div class="nav-sep"></div>
+    <!-- NEW: Gemini + Firebase in their own section -->
+    <div class="nav-sec">Google AI</div>
+    <button class="nav-item locked" data-panel="gemini">
+      <span class="nav-icon">✨</span> AI Explanations
+    </button>
+    <button class="nav-item" data-panel="firebase">
+      <span class="nav-icon">🔥</span> Account & History
+    </button>
+
+    <div class="nav-sep"></div>
+    <div class="nav-sec">System</div>
+    <button class="nav-item" data-panel="auditlog">
+      <span class="nav-icon">📋</span> Audit Log
+      <span class="nav-badge" id="log-badge">0</span>
+    </button>
+
+    <div class="sidebar-foot">
+      <div class="version-tag">FairLens v4 · Gemini + Firebase</div>
+    </div>
+  </nav>
+
+  <!-- MAIN CONTENT — panels injected by main.js -->
+  <main class="content" id="content-root" role="main"></main>
+</div>
+
+<!-- GLOBAL NOTIFICATION -->
+<div class="notif" id="notif" role="alert" aria-live="polite"></div>
+
+<!-- JS MODULES — load order matters -->
+<script src="src/api.js"></script>
+<script src="src/charts.js"></script>
+<script src="src/upload.js"></script>
+<script src="src/overview.js"></script>
+<script src="src/metrics.js"></script>
+<script src="src/inspector.js"></script>
+<script src="src/mitigation.js"></script>
+<script src="src/report.js"></script>
+<script src="src/gemini.js"></script>
+<script src="src/firebase.js"></script>
+<script src="src/main.js"></script>
+</body>
+</html>
