@@ -1,6 +1,6 @@
 # FairLens — AI Hiring Bias Detection Platform
 
-Stack: sklearn + Gemini API + Firebase (no GCP/Vertex/BigQuery needed)
+Stack: sklearn + Groq API (LLaMA 3.1) + Firebase (no GCP/Vertex/BigQuery needed)
 
 ===========================================================================
 FOLDER STRUCTURE
@@ -14,7 +14,7 @@ fairlens/
 │   ├── mitigator.py            ← Reweighing + threshold tuning
 │   ├── proxy_detector.py       ← Cramér's V proxy detection
 │   ├── column_detector.py      ← Auto-detect columns from any CSV
-│   ├── gemini_explainer.py     ← Gemini API plain-language explanations
+│   ├── groq_explainer.py       ← Groq API plain-language explanations
 │   ├── firebase_store.py       ← Firestore audit history + user settings
 │   ├── auth.py                 ← Firebase Auth token verification
 │   ├── requirements.txt        ← Python dependencies
@@ -54,26 +54,33 @@ If you get a permission error add --user:
 
 
 ===========================================================================
-STEP 2 — ADD GEMINI API KEY
+STEP 2 — ADD GROQ API KEY
 ===========================================================================
 
-Get your free key from:
-    https://aistudio.google.com/app/apikey
+Get your free key (no credit card needed) from:
+    https://console.groq.com
 
-Then set it in your terminal:
+Create a .env file inside fairlens/backend/ and add:
+
+    GROQ_API_KEY=your_key_here
+
+OR set it in your terminal:
 
     On Mac/Linux:
-        export GEMINI_API_KEY="your_key_here"
+        export GROQ_API_KEY="your_key_here"
 
     On Windows (Command Prompt):
-        set GEMINI_API_KEY=your_key_here
+        set GROQ_API_KEY=your_key_here
 
     On Windows (PowerShell):
-        $env:GEMINI_API_KEY="your_key_here"
+        $env:GROQ_API_KEY="your_key_here"
 
 To make it permanent on Mac/Linux, add this line to ~/.bashrc or ~/.zshrc:
-    export GEMINI_API_KEY="your_key_here"
+    export GROQ_API_KEY="your_key_here"
 Then run: source ~/.bashrc
+
+IMPORTANT: Never commit your .env file or paste the key directly
+into any source file. Make sure .env is listed in .gitignore.
 
 
 ===========================================================================
@@ -194,11 +201,11 @@ Run:
 You should see:
 
     FairLens API v4.0
-    Gemini:   ✓ (if GEMINI_API_KEY is set)
+    Groq:     ✓ (if GROQ_API_KEY is set)
     Firebase: ✓ (if firebase_credentials.json is found)
     http://localhost:5050
 
-If Gemini shows ✗ — check your GEMINI_API_KEY environment variable
+If Groq shows ✗ — check your GROQ_API_KEY environment variable
 If Firebase shows ✗ — check firebase_credentials.json is in the backend folder
 
 Leave this terminal open while using the platform.
@@ -217,7 +224,7 @@ OR open your browser and go to:
     file:///path/to/fairlens/frontend/public/index.html
 
 The top bar should show:
-    Backend connected · ✓ Gemini · ✓ Firebase
+    Backend connected · ✓ Groq · ✓ Firebase
 
 
 ===========================================================================
@@ -235,15 +242,15 @@ STEP 9 — TEST THE PLATFORM
    - Inspector       → filter and inspect individual candidates
    - Mitigation      → run reweighing + threshold tuning
    - Audit Report    → full findings + export
-   - AI Explanations → Gemini plain-language explanations
+   - AI Explanations → Groq/LLaMA plain-language explanations
    - Account         → register/login to save audit history
 
 
 ===========================================================================
-WHAT EACH GOOGLE TOOL DOES IN THIS PROJECT
+WHAT EACH TOOL DOES IN THIS PROJECT
 ===========================================================================
 
-Gemini API:
+Groq API (LLaMA 3.1 8B — free, no credit card):
   - Explains fairness metrics in plain English for HR managers
   - Writes executive summary of the full audit
   - Explains why proxy features are risky
@@ -253,7 +260,7 @@ Gemini API:
 Firebase (Firestore):
   - Saves every audit run to your account
   - Stores user settings (org name, thresholds)
-  - Caches Gemini explanations to avoid repeat API calls
+  - Caches AI explanations to avoid repeat API calls
   - Audit history panel shows all past runs
 
 
@@ -264,9 +271,10 @@ TROUBLESHOOTING
 "Backend offline" in the browser:
   → Make sure python app.py is running in the terminal
 
-"Gemini ✗":
-  → Check: echo $GEMINI_API_KEY in terminal (Mac/Linux)
-  → Check: echo %GEMINI_API_KEY% in terminal (Windows)
+"Groq ✗":
+  → Check your .env file has GROQ_API_KEY=your_key_here
+  → Or check: echo $GROQ_API_KEY in terminal (Mac/Linux)
+  → Or check: echo %GROQ_API_KEY% in terminal (Windows)
   → Make sure you set it in the SAME terminal you run python app.py
 
 "Firebase ✗":
@@ -280,3 +288,7 @@ TROUBLESHOOTING
 "Module not found" error:
   → Run: pip install -r requirements.txt
   → Make sure you are using Python 3.10 or higher: python --version
+
+"name '_API_KEY' is not defined":
+  → Your GROQ_API_KEY is not set. Add it to your .env file.
+  → Never hardcode API keys directly in source files.
