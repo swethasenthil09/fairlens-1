@@ -1,7 +1,7 @@
 """
 app.py — FairLens Flask API v4
 Adds:
-  - /api/explain/*      → Gemini plain-language explanations
+  - /api/explain/*      → Groq plain-language explanations
   - /api/firebase/*     → Firebase audit history + dataset storage
   - /api/auth/verify    → Firebase token check
 All existing endpoints unchanged.
@@ -12,6 +12,9 @@ import numpy as np
 from pathlib import Path
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+from dotenv import load_dotenv
+
+load_dotenv()
 
 sys.path.insert(0, str(Path(__file__).parent))
 
@@ -43,10 +46,24 @@ UPLOAD_DIR = Path(__file__).parent.parent / "data"
 UPLOAD_DIR.mkdir(exist_ok=True)
 
 app  = Flask(__name__)
-CORS(app, supports_credentials=True,
+
+# ── CORS — allow localhost dev + Netlify production ───────────────
+NETLIFY_URL = os.environ.get("NETLIFY_URL", "")  # set this in Render env vars
+allowed_origins = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:5050",
+    "http://127.0.0.1:5500",
+    "null",  # file:// in browser
+]
+if NETLIFY_URL:
+    allowed_origins.append(NETLIFY_URL)
+
+CORS(app,
+     supports_credentials=True,
      allow_headers=["Content-Type", "Authorization"],
-     origins=["http://localhost:3000", "http://127.0.0.1:3000",
-               "http://localhost:5050", "null"])
+     origins=allowed_origins)
+
 _eng = FairLensEngine()
 
 def ok(d):  d["ok"] = True; return jsonify(d)
@@ -62,7 +79,8 @@ def health():
         "dataset_loaded":   _eng.df is not None,
         "model_trained":    _eng.model is not None,
         "firebase_enabled": _firebase_enabled,
-        "gemini_enabled":   bool(os.environ.get("GROQ_API_KEY")),
+        "groq_enabled":     bool(os.environ.get("GROQ_API_KEY")),
+        "gemini_enabled":   bool(os.environ.get("GROQ_API_KEY")),  # frontend compat
     })
 
 
@@ -78,8 +96,6 @@ def upload():
 
     path = UPLOAD_DIR / "uploaded.csv"
     f.save(str(path))
-
-    # Note: Firebase Storage requires Blaze plan — using Firestore only
 
     overrides = {}
     if request.form.get("outcome_col"):
@@ -279,7 +295,6 @@ def report():
             "n_rows": len(_eng.df),
         }
 
-        # Save to Firebase if logged in
         uid = getattr(request, "uid", "anonymous")
         if _firebase_enabled and uid != "anonymous":
             try:
@@ -294,12 +309,11 @@ def report():
 
 
 # ════════════════════════════════════════════════════════════════
-# GEMINI EXPLANATION ENDPOINTS
+# GROQ EXPLANATION ENDPOINTS
 # ════════════════════════════════════════════════════════════════
 
 @app.route("/api/explain/metric", methods=["POST"])
 def explain_metric_ep():
-    """POST {metric_name, value, threshold, attribute}"""
     if _eng.model is None: return err("Model not trained", 400)
     body        = request.get_json(force=True) or {}
     attribute   = body.get("attribute", "")
@@ -318,14 +332,12 @@ def explain_metric_ep():
 @app.route("/api/explain/report", methods=["POST"])
 @optional_auth
 def explain_report_ep():
-    """POST {} — executive summary of full audit"""
     if _eng.model is None: return err("Model not trained", 400)
 
     body     = request.get_json(force=True, silent=True) or {}
     audit_id = body.get("audit_id", "")
     uid      = getattr(request, "uid", "anonymous")
 
-    # Check cache
     if _firebase_enabled and audit_id and uid != "anonymous":
         cached = get_cached_explanation(uid, audit_id, "report_summary")
         if cached:
@@ -358,7 +370,6 @@ def explain_report_ep():
 
 @app.route("/api/explain/proxy/<feature>")
 def explain_proxy_ep(feature):
-    """GET /api/explain/proxy/<feature_name>"""
     if _eng.df is None: return err("No dataset", 404)
     risks = _eng.proxy_analysis().get("feature_proxy_risks", {})
     if feature not in risks:
@@ -372,7 +383,6 @@ def explain_proxy_ep(feature):
 
 @app.route("/api/explain/mitigation", methods=["POST"])
 def explain_mitigation_ep():
-    """POST {before, after, strategies, sensitive_col}"""
     body = request.get_json(force=True) or {}
     if not body.get("before") or not body.get("after"):
         return err("Need 'before' and 'after' metric snapshots")
@@ -384,7 +394,6 @@ def explain_mitigation_ep():
 
 @app.route("/api/explain/candidate", methods=["POST"])
 def explain_candidate_ep():
-    """POST {candidate: {...row...}}"""
     if _eng.df is None: return err("No dataset", 404)
     body = request.get_json(force=True) or {}
     if not body.get("candidate"):
@@ -437,9 +446,6 @@ def get_audit_ep(audit_id):
     return ok({"audit": audit})
 
 
-
-
-
 @app.route("/api/firebase/settings", methods=["GET", "POST"])
 @require_auth
 def user_settings_ep():
@@ -451,10 +457,11 @@ def user_settings_ep():
 
 
 if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 5050))
     print("=" * 52)
     print("  FairLens API v4.0")
     print(f"  Groq AI:  {'✓' if os.environ.get('GROQ_API_KEY') else '✗ set GROQ_API_KEY'}")
     print(f"  Firebase: {'✓' if _firebase_enabled else '✗ set FIREBASE_CREDENTIALS'}")
-    print("  http://localhost:5050")
+    print(f"  http://localhost:{port}")
     print("=" * 52)
-    app.run(host="0.0.0.0", port=5050, debug=True)
+    app.run(host="0.0.0.0", port=port, debug=False)
