@@ -3,8 +3,7 @@
  * Auto-attaches Firebase auth token to every request when available.
  */
 
-const API_BASE = "http://localhost:5050/api";
-
+const API_BASE = "https://fairlens-1-cu9v.onrender.com/api";
 const API = {
   _token: null,
 
