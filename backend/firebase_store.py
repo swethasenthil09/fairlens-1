@@ -1,19 +1,18 @@
 """
 firebase_store.py — Firestore only (no Firebase Storage)
 Works on the free Spark plan.
-Saves: audit history, user settings, Gemini explanation cache.
+Saves: audit history, user settings, Groq explanation cache.
+
+Local:  set FIREBASE_CREDENTIALS=firebase_credentials.json
+Render: set FIREBASE_CREDENTIALS_JSON={...entire json content...}
 """
 import os
+import json
 import datetime
 from pathlib import Path
 
 import firebase_admin
 from firebase_admin import credentials, firestore, auth
-
-_CRED_PATH = os.environ.get(
-    "FIREBASE_CREDENTIALS",
-    str(Path(__file__).parent / "firebase_credentials.json")
-)
 
 _app = None
 
@@ -22,14 +21,33 @@ def _init():
     global _app
     if _app is not None:
         return
-    if not Path(_CRED_PATH).exists():
-        raise FileNotFoundError(
-            f"Firebase credentials not found at {_CRED_PATH}. "
-            "Download from Firebase Console → Project Settings → "
-            "Service accounts → Generate new private key"
-        )
-    cred = credentials.Certificate(_CRED_PATH)
-    _app = firebase_admin.initialize_app(cred)
+
+    # ── Option 1: JSON content via env var (Render) ───────────────
+    creds_json = os.environ.get("FIREBASE_CREDENTIALS_JSON")
+    if creds_json:
+        try:
+            creds_dict = json.loads(creds_json)
+            cred = credentials.Certificate(creds_dict)
+            _app = firebase_admin.initialize_app(cred)
+            return
+        except Exception as e:
+            raise ValueError(f"FIREBASE_CREDENTIALS_JSON is invalid JSON: {e}")
+
+    # ── Option 2: File path via env var (local) ───────────────────
+    cred_path = os.environ.get(
+        "FIREBASE_CREDENTIALS",
+        str(Path(__file__).parent / "firebase_credentials.json")
+    )
+    if Path(cred_path).exists():
+        cred = credentials.Certificate(cred_path)
+        _app = firebase_admin.initialize_app(cred)
+        return
+
+    raise FileNotFoundError(
+        "Firebase credentials not found. "
+        "Local: set FIREBASE_CREDENTIALS=firebase_credentials.json. "
+        "Render: set FIREBASE_CREDENTIALS_JSON={...json content...}"
+    )
 
 
 def _db():
@@ -110,10 +128,10 @@ def get_user_settings(user_id: str) -> dict:
     return defaults
 
 
-# ── GEMINI EXPLANATION CACHE ──────────────────────────────────────
+# ── GROQ EXPLANATION CACHE ────────────────────────────────────────
 def save_explanation(user_id: str, audit_id: str,
                      explanation_type: str, content: str) -> None:
-    """Cache a Gemini explanation to avoid re-calling the API."""
+    """Cache a Groq explanation to avoid re-calling the API."""
     db  = _db()
     key = f"{user_id}_{audit_id}_{explanation_type}"
     db.collection("explanations").document(key).set({
@@ -127,7 +145,7 @@ def save_explanation(user_id: str, audit_id: str,
 
 def get_cached_explanation(user_id: str, audit_id: str,
                             explanation_type: str) -> str | None:
-    """Return cached Gemini explanation or None if not found."""
+    """Return cached Groq explanation or None if not found."""
     db  = _db()
     key = f"{user_id}_{audit_id}_{explanation_type}"
     doc = db.collection("explanations").document(key).get()
